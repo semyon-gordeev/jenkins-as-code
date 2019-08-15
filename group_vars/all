@@ -1,0 +1,11 @@
+---
+jenkins_host: "{{ ansible_host }}"
+jenkins_user: simon
+jenkins_password: itechforum19
+deploy_repo: https://github.com/semyon-gordeev/test_jenkins.git
+app_name: test
+env: prod
+aws_region: us-east-1
+aws_account_id: 675386865712
+slack_token:
+deploy_keys:

@@ -1,0 +1,19 @@
+---
+{% for item in app_list %}
+- job:
+    name: {{ item.app }}-{{ env }}
+    description: '{{ item.app }} {{ env }} pipeline '
+    properties:
+      - inject:
+          properties-content: |
+            ENV={{ env }}
+    project-type: pipeline
+    pipeline-scm:
+      scm:
+        - git:
+            url: {{ item.git }}
+            branches:
+              - "origin/{% if env == 'prod' %}master{% else %}{{ env }}{% endif %}"
+            wipe-workspace: false
+      script-path: Jenkinsfile
+{% endfor %}

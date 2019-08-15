@@ -1,0 +1,108 @@
+jenkins:
+  agentProtocols:
+  - "JNLP4-connect"
+  - "Ping"
+  authorizationStrategy:
+    globalMatrix:
+      grantedPermissions:
+        - "Overall/Read:authenticated"
+        - "Job/Read:authenticated"
+        - "View/Read:authenticated"
+        - "Overall/Administer:authenticated"
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+      - id: {{ jenkins_user }}
+        password: {{ jenkins_password }}
+  crumbIssuer:
+    standard:
+      excludeClientIPFromCrumb: false
+  disableRememberMe: false
+  globalNodeProperties:
+  - envVars:
+      env:
+      - key: "SLACK"
+        value: "{% if slack_token %}true{% else %}false{% endif %}"
+      - key: "AWS_ACCOUNT_ID"
+        value: {{ aws_account_id }}
+      - key: "REGION"
+        value: {{ aws_region }}
+  mode: NORMAL
+  numExecutors: 2
+  primaryView:
+    all:
+      name: "all"
+  quietPeriod: 5
+  remotingSecurity:
+    enabled: false
+  scmCheckoutRetryCount: 0
+  slaveAgentPort: -1
+  views:
+  - all:
+      name: "all"
+security:
+  apiToken:
+    creationOfLegacyTokenEnabled: false
+    tokenGenerationOnCreationEnabled: false
+    usageStatisticsEnabled: true
+  downloadSettings:
+    useBrowser: false
+  envInject:
+    enableLoadingFromMaster: false
+    enablePermissions: false
+    hideInjectedVars: false
+  queueItemAuthenticator:
+    authenticators:
+    - global:
+        strategy: "triggeringUsersAuthorizationStrategy"
+  sSHD:
+    port: -1
+unclassified:
+  location:
+    adminAddress: "admin@example.com"
+    url: "http://{{ jenkins_host }}/"
+{% if slack_token %}
+  slackNotifier:
+    teamDomain: alphapipe
+    tokenCredentialId: slack_token
+    room: jenkins
+{% endif %}
+tool:
+  dockerTool:
+    installations:
+    - name: "docker"
+  git:
+    installations:
+    - home: "git"
+      name: "Default"
+  jdk:
+    defaultProperties:
+    - installSource:
+        installers:
+        - jdkInstaller:
+            acceptLicense: false
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+{% if slack_token %}
+          - string:
+              scope: GLOBAL
+              id: slack_token
+              secret: "{{ slack_token }}"
+              description: slack token
+{% endif %}
+{% if deploy_keys %}
+{% for key, value in deploy_keys.items() %}
+          - basicSSHUserPrivateKey:
+              scope: GLOBAL
+              id: {{ key }}-github
+              username: git
+              description: {{ key }}-github
+              privateKeySource:
+                directEntry:
+                  privateKey: |
+                    {{ value | indent (20, false) }}
+{% endfor %}
+{% endif %}

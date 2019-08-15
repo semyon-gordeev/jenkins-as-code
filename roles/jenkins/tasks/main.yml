@@ -1,0 +1,143 @@
+---
+- name: add java repo
+  apt_repository:
+    repo: ppa:webupd8team/java
+
+- name: install dependencies
+  apt:
+    name: "{{ query('flattened', '{{ dependencies }}') }}"
+    update_cache: yes
+
+- name: install awscli
+  pip:
+    name: "awscli=={{ aws_cli }}"
+
+- name: add jenkins apt key
+  apt_key:
+    url: https://pkg.jenkins.io/debian/jenkins.io.key
+
+- name: add jenkins repo
+  apt_repository:
+    repo: deb http://pkg.jenkins.io/debian-stable binary/
+
+- name: add docker apt key
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+
+- name: add docker repo
+  apt_repository:
+    repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu bionic stable
+
+- name: install docker & jenkins
+  apt:
+    name: ['jenkins={{ jenkins_version }}*', 'docker-ce={{ docker_version }}*']
+    update_cache: yes
+
+- name: add jenkins user to docker group
+  user:
+    name: jenkins
+    group: docker
+    append: yes
+
+- name: cron task to clear out docker images
+  cron:
+    name: "clear out docker images"
+    minute: "0"
+    hour: "8"
+    weekday: "0"
+    job: "docker rmi -f $(docker images -q)"
+
+- name: configure nginx proxy
+  template:
+    src: nginx.conf.j2
+    dest: "/etc/nginx/sites-available/{{ jenkins_host }}.conf"
+  notify: restart nginx
+
+- name: remove nginx default page
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+
+- name: enable nginx site
+  file:
+    src: "/etc/nginx/sites-available/{{ jenkins_host }}.conf"
+    dest: "/etc/nginx/sites-enabled/{{ jenkins_host }}.conf"
+    state: link
+  notify: restart nginx
+
+- name: read jenkins pass
+  command: cat /var/lib/jenkins/secrets/initialAdminPassword
+  ignore_errors: yes
+  register: jenkins_pass
+
+- name: disable jenkins setup wizard
+  lineinfile:
+    path: /etc/default/jenkins
+    regexp: '^JAVA_ARGS='
+    line: 'JAVA_ARGS="-Djava.awt.headless=true -Djenkins.install.runSetupWizard=false"'
+  when: jenkins_pass.rc == 0
+  notify: restart jenkins
+
+- name: create directory for init script
+  file:
+    path: /var/lib/jenkins/init.groovy.d
+    state: directory
+    owner: jenkins
+    group: jenkins
+  when: jenkins_pass.rc == 0
+
+- name: make jenkins initial setup compleate
+  copy:
+    src: basic-security.groovy
+    dest: /var/lib/jenkins/init.groovy.d/basic-security.groovy
+    owner: jenkins
+    group: jenkins
+  when: jenkins_pass.rc == 0
+  notify: restart jenkins
+
+- name: install jenkins plugins
+  jenkins_plugin:
+    name: "{{ item }}"
+    url_username: admin
+    url_password: "{{ jenkins_pass.stdout }}"
+    timeout: 60
+  with_flattened: "{{ jenkins_plugins }}"
+  notify:
+    - restart jenkins
+    - wait jenkins
+  when: jenkins_pass.rc == 0
+
+- meta: flush_handlers
+
+- name: jenkins jobs builder configs
+  template:
+    src: "{{ item }}.j2"
+    dest: "/tmp/{{ item }}"
+  with_items:
+    - jenkins-jobs.ini
+    - jobs.yml
+  when: jenkins_pass.rc == 0
+
+- name: init jobs
+  command: jenkins-jobs --conf /tmp/jenkins-jobs.ini update /tmp/jobs.yml
+  notify: restart jenkins
+  when: jenkins_pass.rc == 0
+
+- name: jenkins configuration as a code
+  template:
+    src: jenkins.yaml.j2
+    dest: /var/lib/jenkins/jenkins.yaml
+    owner: jenkins
+    group: jenkins
+  notify: restart jenkins
+
+- meta: flush_handlers
+
+- name: clear after jenkins init
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - /var/lib/jenkins/init.groovy.d/basic-security.groovy
+    - /var/lib/jenkins/secrets/initialAdminPassword
+    - /tmp/jenkins-jobs.ini

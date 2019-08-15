@@ -1,0 +1,54 @@
+upstream app_server {
+    keepalive 32;
+    server 127.0.0.1:8080 fail_timeout=0;
+}
+
+map "$http_x_forwarded_proto:$http_user_agent" $do_redirect {
+    default 1;
+    "~(.*):ELB-HealthChecker(.*)" 0;
+    "~https:(.*)" 0;
+}
+
+server {
+    listen 80 default;
+
+    server_name {{ jenkins_host }};
+
+    root /var/run/jenkins/war/;
+
+    #if ($do_redirect) {
+    #    return 301 https://$host$request_uri;
+    #}
+
+    location /test {
+	    return 200 'ok';
+    }
+
+    location ~ "^/static/[0-9a-fA-F]{8}\/(.*)$" {
+        rewrite "^/static/[0-9a-fA-F]{8}\/(.*)" /$1 last;
+    }
+
+    location / {
+        sendfile off;
+        proxy_pass http://app_server$request_uri;
+        proxy_redirect off;
+        proxy_http_version 1.1;
+
+        proxy_set_header   X-Forwarded-Host   $host;
+        proxy_set_header   X-Real-IP          $remote_addr;
+        proxy_set_header   X-Forwarded-For    $proxy_add_x_forwarded_for;
+        # proxy_set_header   X-Forwarded-Proto  "https";
+        proxy_max_temp_file_size 0;
+
+      	#this is the maximum upload size
+      	client_max_body_size       10m;
+      	client_body_buffer_size    128k;
+
+      	proxy_connect_timeout      90;
+      	proxy_send_timeout         90;
+      	proxy_read_timeout         90;
+      	proxy_request_buffering    off; # Required for HTTP CLI commands in Jenkins > 2.54
+      	proxy_set_header Connection ""; # Clear for keepalive
+    }
+
+}

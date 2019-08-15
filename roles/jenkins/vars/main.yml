@@ -1,0 +1,34 @@
+---
+docker_version: 18.06.1
+jenkins_version: 2.176.2
+aws_cli: 1.16.102
+
+app_list:
+  - {app: "{{ app_name }}", git: "{{ deploy_repo }}"}
+
+dependencies:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - software-properties-common
+  - openjdk-8-jdk
+  - nginx
+  - python3-jenkins-job-builder
+  - python3-pip
+  - jq
+
+jenkins_plugins:
+  - amazon-ecr
+  - authorize-project
+  - configuration-as-code
+  - configuration-as-code-support
+  - docker-plugin
+  - envinject
+  - git
+  - matrix-auth
+  - pipeline-utility-steps
+  - role-strategy
+  - saml
+  - slack
+  - script-security
+  - workflow-aggregator
