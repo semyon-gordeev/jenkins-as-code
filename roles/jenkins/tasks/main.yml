@@ -100,8 +100,9 @@
     name: "{{ item }}"
     url_username: admin
     url_password: "{{ jenkins_pass.stdout }}"
-    timeout: 60
+    timeout: 180
   with_flattened: "{{ jenkins_plugins }}"
+  ignore_errors: yes
   notify:
     - restart jenkins
     - wait jenkins
